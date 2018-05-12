@@ -1,0 +1,44 @@
+#__AutoForm{
+  position: fixed;
+  left: 0;
+  bottom: 10%;
+  padding: 5px;
+  background-color: white;
+  border: 1px solid black;
+  border-radius: 3px;
+  button{
+    border: 1px solid blue;
+    font-weight: bold;
+    padding: 2px;
+    font-size: small;
+  }
+}
+
+#__AutoFormFloat{
+  position: fixed;
+  padding: 5px;
+  background-color: white;
+  border: 1px solid black;
+  border-radius: 3px;
+  z-index: 999999;
+  button{
+    border: 1px solid black;
+    padding: 5px;
+    [data-btn=add]{
+      color: green;
+    }
+    [data-btn=remove]{
+      color: red;
+    }
+  }
+}
+
+.__Highlight:hover{
+  outline: 3px orangered solid;
+  background-color: aqua;
+  transition: background-color, outline-width ease-out 0.2s;
+}
+
+[data-oncreate]{
+  display: none;
+}
