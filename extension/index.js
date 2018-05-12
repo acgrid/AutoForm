@@ -3,25 +3,29 @@ jQuery($ => {
     const UI = (function(){
         const container = $(`<section id="__AutoForm"><h5>表单填写工具</h5>
 <div id="__Setup"><span></span><button>修改</button></div>
-<div id="__Create"><button data-btn="query">查询</button><button data-oncreate="save">保存</button><p data-oncreate="query"><span data-type="status"></span><span data-type="elements">0</span>个表单元素</p></div>
-<div id="__Upload"></div>
-<div id="__Execute"></div>
+<div id="__Create"><button data-btn="query">查询服务器</button><button data-oncreate="query" data-btn="save">保存</button><p data-oncreate="query"></p></div>
+<div id="__Upload" data-oncreate="page">文件选择:<select></select><form enctype="multipart/form-data"><input type="file" accept=".xls, .xlsx, .csv"><button>上传Excel表格</button></form></div>
+<div id="__Execute" data-oncreate="file"></div>
 </section>`);
-        return {
+        const ui = {
             container,
             setup: container.find("#__Setup"),
             create: container.find("#__Create"),
-            upload: container.find("#__Upload"),
+            files: container.find("#__Upload"),
             execute: container.find("#__Execute"),
+            option: $(`<option></option>`),
             float: $('<div id="__AutoFormFloat" data-oncreate="select"><span></span><button data-btn="add">添加</button><button data-btn="remove">删除</button><button data-btn="submit">提交按钮</button></div>')
         };
+        UI.page.$status = ui.page.find("p");
+        UI.fileSelect = ui.files.find("select");
+        return ui;
     })();
     // TODO Query BG and get current
     //
     // Is there any form elements?
     const $formElements = $('input,select,textarea');
     const $buttonElements = $('a,button');
-    const runtime = {serverUrl: '', fields: [], submit: '', onFloat: false, onControl: false};
+    const runtime = {serverUrl: '', pageId: null, name: null, match: null, fields: [], files: [], submit: '', onFloat: false, onControl: false};
 
     if($formElements.length){
         const $body = $('body');
@@ -31,7 +35,8 @@ jQuery($ => {
             updateSetupUI(ServerUrl);
         });
         UI.setup.on("click", "button", updateServerUrl);
-        UI.create.on("click", "button[data-btn=query]", queryServerPage);
+        UI.page.on("click", "button[data-btn=query]", makeRequest(queryServerPage));
+        UI.page.on("click", "button[data-btn=save]", saveServerPage);
         UI.float.hover(() => {
             runtime.onFloat = true;
         }, () => {
@@ -39,7 +44,7 @@ jQuery($ => {
             delayedFadeOut(() => !runtime.onControl);
         });
         UI.float.on("click", "button", addRemoveElement);
-        UI.create.on("click", "button[data-btn=]")
+        UI.files.on("click", "button", uploadList);
     }else{
         console.log('页面内未找到表单元素，退出')
     }
@@ -50,13 +55,13 @@ jQuery($ => {
         runtime.serverUrl = serverUrl || '';
         if(serverUrl){
             status.text("已设置服务器").prop('title', serverUrl);
-            UI.create.show();
-            UI.upload.show();
+            UI.page.show();
+            UI.files.show();
             UI.execute.show();
         }else{
             status.text("未设置服务器").prop('title', '');
-            UI.create.hide();
-            UI.upload.hide();
+            UI.page.hide();
+            UI.files.hide();
             UI.execute.hide();
         }
     }
@@ -72,22 +77,58 @@ jQuery($ => {
         return `${location.host}${location.pathname}${location.search}`;
     }
 
-    function queryServerPage(e){
-        e.preventDefault();
-        const $btn = $(this), $status = UI.create.find("p");
-        $btn.prop('disabled', true);
-        $.get(`${runtime.serverUrl}/page`, {url: getUrl()}).then(page => {
+    function makeRequest(creator){
+        return function(e){
+            e.preventDefault();
+            const $btn = $(this);
+            $btn.prop('disabled', true);
+            return creator().fail((jqXHR, status, error) => {
+                // alert('网络请求错误');
+            }).always(() => {
+                $btn.prop('disabled', false);
+            });
+        }
+    }
+
+    function queryServerPage(){
+        return $.get(`${runtime.serverUrl}/page`, {url: getUrl()}).then(page => {
             $("[data-oncreate=query]").show();
             if(page){
-                console.log(page);
+                setPageData(page);
             }else{
-                $status.text("新页面，请依次点击页面中的表单元素");
-                $formElements.addClass("__Highlight");
-                $formElements.hover(onSelectElement, onDeselectElement);
-                $buttonElements.hover(onSelectElement, onDeselectElement);
+                UI.page.$status.text("新页面，请依次点击页面中的表单元素");
             }
-        }).always(() => {
-            $btn.prop('disabled', false);
+            $formElements.addClass("__Highlight");
+            $formElements.hover(onSelectElement, onDeselectElement);
+            $buttonElements.hover(onSelectElement, onDeselectElement);
+        });
+    }
+
+    function saveServerPage(){
+        const name = window.prompt("请为该表单设置名称", runtime.name || document.title);
+        const match = window.prompt("请确认该表单出现的网址", runtime.match || getUrl());
+        if(!name || !match) return;
+        const page = {name, match, fields: runtime.fields, submit: runtime.submit};
+        return $.post(`${runtime.serverUrl}/page`, {...page, fields: JSON.stringify(runtime.fields)}).then(response => {
+            if(response['pageId']){
+                page.id = response['pageId'];
+                setPageData(page);
+            }
+        });
+    }
+
+    function setPageData(page){
+        console.log(page);
+        runtime.pageId = page.id;
+        runtime.name = page.name;
+        runtime.match = page.match;
+        runtime.fields = page.fields;
+        runtime.submit = page.submit;
+        runtime.files = page.files || [];
+        UI.page.$status.text(`[${page.fields.length}个位置] ${page.name}`);
+        UI.fileSelect.empty();
+        UI.files.forEach(file => {
+            UI.fileSelect.append(UI.option.clone().attr({value: file.id, title: (new Date(file['uploaded'] / 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
         });
     }
 
@@ -163,4 +204,17 @@ jQuery($ => {
     function findPathIndex(path){
         return runtime.fields.indexOf(path);
     }
+
+    function uploadList(){
+        return $.ajax({
+            url: "animes.php",
+            type: "POST",
+            data: new FormData($form.get(0)),
+            processData: false,
+            contentType: false
+        }).then(response => {
+
+        });
+    }
 });
+
