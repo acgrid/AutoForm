@@ -1,0 +1,16 @@
+{
+  "name": "xuan/autoform",
+  "description": "Auto form helper",
+  "type": "project",
+  "license": "proprietary",
+  "require": {
+    "php-di/slim-bridge": "^1.0",
+    "symfony/console": "^3.3",
+    "phpoffice/phpspreadsheet": "^1.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "AutoForm\\": "src/"
+    }
+  }
+}
