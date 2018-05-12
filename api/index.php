@@ -1,7 +1,6 @@
 <?php
 
 use DI\Container;
-use DI\FactoryInterface;
 use Slim\App;
 use Slim\Http\Request;
 use Slim\Http\Response;
@@ -114,8 +113,15 @@ $app->group('', function(){
     });
     $this->get('/file/{fileId:[0-9]+}', function($fileId, Request $request, Response $response, \PDO $pdo){
         if(($fileId = intval($fileId)) <= 0) return $response->withJson(['error' => '文件ID错误']);
-        $stmt = $pdo->prepare('SELECT data, error, run FROM rows WHERE file = ? ORDER BY row ASC');
-        $stmt->execute([$fileId]);
+        $from = $request->getQueryParam('from');
+        $to = $request->getQueryParam('to');
+        if($from && $to){
+            $stmt = $pdo->prepare('SELECT data, error, run FROM rows WHERE file = ? AND row >= ? AND row <= ? ORDER BY row ASC');
+            $stmt->execute([$fileId, $from, $to]);
+        }else{
+            $stmt = $pdo->prepare('SELECT data, error, run FROM rows WHERE file = ? ORDER BY row ASC');
+            $stmt->execute([$fileId]);
+        }
         return $response->withJson(array_map(function($row){
             $row['data'] = json_decode($row['data']);
             return $row;
