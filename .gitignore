@@ -97,6 +97,6 @@ fabric.properties
 /config/dev/*.php
 /config/test/*.php
 /config/prod/*.php
-/bower_components/
-/node_modules/
 /api/web.config
+
+extension/*.css.*
