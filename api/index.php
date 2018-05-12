@@ -25,8 +25,8 @@ $app->group('', function(){
         }
         $stmt = $pdo->prepare("SELECT * FROM pages WHERE ? LIKE `match` || '%'");
         $stmt->execute([$url]);
-        $fileStmt = $pdo->prepare("SELECT id, filename, uploaded, (SELECT COUNT(*) FROM rows WHERE file = f.id) AS rows, (SELECT COUNT(*) FROM rows WHERE file = f.id AND run IS NOT NULL) AS ran FROM files AS f WHERE page = ?");
-        return $response->withJson(array_map(function($page) use ($fileStmt) {
+        $fileStmt = $pdo->prepare("SELECT id, filename, uploaded, (SELECT COUNT(*) FROM rows WHERE file = f.id) AS rows, (SELECT COUNT(*) FROM rows WHERE file = f.id AND run IS NOT NULL) AS ran FROM files AS f WHERE page = ? ORDER BY id DESC LIMIT 1");
+        if($page = $stmt->fetch()){
             $page['id'] = intval($page['id']);
             $page['fields'] = json_decode($page['fields']);
             $fileStmt->execute([$page['id']]);
@@ -37,8 +37,15 @@ $app->group('', function(){
                 $file['ran'] = intval($file['ran']);
                 return $file;
             }, $fileStmt->fetchAll());
-            return $page;
-        }, $stmt->fetchAll()));
+            return $response->withJson($page);
+        }else{
+            return $response->withJson(null);
+        }
+    });
+    $this->delete('/page/{pageId:[0-9]+}', function($pageId, Response $response, \PDO $pdo){
+        $stmt = $pdo->prepare('DELETE FROM pages WHERE id = ?');
+        $stmt->execute([$pageId]);
+        return $response->withStatus(204);
     });
     $this->post('/page', function(Request $request, Response $response, \PDO $pdo){
         $page = [];
@@ -47,9 +54,19 @@ $app->group('', function(){
             if(empty($param)) return $response->withJson(['error' => "页面信息 $key 为空"]);
         }
         if(!json_decode($page[2]) || json_last_error() !== JSON_ERROR_NONE) return $response->withJson(['error' => "页面配置字段错误:" . json_last_error_msg()]);
-        $stmt = $pdo->prepare('INSERT INTO pages (name, match, fields, submit) VALUES (?, ?, ?, ?)');
-        $stmt->execute($page);
-        return $response->withJson(['pageId' => intval($pdo->lastInsertId())]);
+        $testStmt = $pdo->prepare('SELECT id FROM pages WHERE match = ?');
+        $testStmt->execute([$page[1]]);
+        $test = $testStmt->fetch();
+        if($test){
+            $pageId = intval($test['id']);
+            $updateStmt = $pdo->prepare('UPDATE pages SET name = ?, fields = ?, submit = ? WHERE id = ?');
+            $updateStmt->execute([$page[0], $page[2], $page[3], $pageId]);
+        }else{
+            $stmt = $pdo->prepare('INSERT OR IGNORE INTO pages (name, match, fields, submit) VALUES (?, ?, ?, ?)');
+            $stmt->execute($page);
+            $pageId = intval($pdo->lastInsertId());
+        }
+        return $response->withJson(compact('pageId'));
     });
     $this->post('/page/{pageId:[0-9]+}/file', function($pageId, Request $request, Response $response, \PDO $pdo){
         $pageId = intval($pageId);
