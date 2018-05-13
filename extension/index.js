@@ -204,7 +204,7 @@ jQuery($ => {
         UI.float.find("[data-btn=remove]").toggle(isInput && pathAdded);
         UI.float.find("[data-btn=submit]").toggle(!isInput && !pathAdded);
         UI.float.find("span").text(pathAdded ? (isInput ? `序号：${pathIndex + 1}` : '已选为提交按钮') : '');
-        UI.float.css({top: rect.y - rect.height / 2, left: rect.x}).data({path, pathIndex}).show();
+        UI.float.css({top: rect.y - rect.height / 2, left: rect.x - 50}).data({path, pathIndex}).show();
         runtime.onControl = true;
     }
 
