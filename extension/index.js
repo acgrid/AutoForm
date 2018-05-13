@@ -4,8 +4,8 @@ jQuery($ => {
         const container = $(`<section id="__AutoForm"><h5>表单填写工具</h5>
 <div id="__Setup"><span></span><button>修改</button></div>
 <div id="__Create"><button data-btn="query">查询服务器</button><button data-oncreate="query" data-btn="save">保存</button><p data-oncreate="query"></p></div>
-<div id="__Upload" data-oncreate="page">文件选择:<select></select><form enctype="multipart/form-data"><input type="file" accept=".xls, .xlsx, .csv"><button>上传Excel表格</button></form></div>
-<div id="__Execute" data-oncreate="file"></div>
+<div id="__Upload" data-oncreate="page"><form enctype="multipart/form-data"><input type="file" name="upload" accept=".xls, .xlsx, .csv"><button>上传Excel表格</button></form></div>
+<div id="__Execute" data-oncreate="file">文件选择:<select></select><br />行范围:<input type="number" name="from" value="1" />-<input type="number" name="to" value="" /><br /><button>开始填写</button></div>
 </section>`);
         const ui = {
             container,
@@ -16,15 +16,15 @@ jQuery($ => {
             option: $(`<option></option>`),
             float: $('<div id="__AutoFormFloat" data-oncreate="select"><span></span><button data-btn="add">添加</button><button data-btn="remove">删除</button><button data-btn="submit">提交按钮</button></div>')
         };
-        UI.page.$status = ui.page.find("p");
-        UI.fileSelect = ui.files.find("select");
+        ui.create.$status = ui.create.find("p");
+        ui.fileSelect = ui.execute.find("select");
         return ui;
     })();
     // TODO Query BG and get current
     //
     // Is there any form elements?
-    const $formElements = $('input,select,textarea');
-    const $buttonElements = $('a,button');
+    const $formElements = $('input,select,textarea').not('[type=submit]');
+    const $buttonElements = $('a,button,input[type=submit]');
     const runtime = {serverUrl: '', pageId: null, name: null, match: null, fields: [], files: [], submit: '', onFloat: false, onControl: false};
 
     if($formElements.length){
@@ -35,8 +35,8 @@ jQuery($ => {
             updateSetupUI(ServerUrl);
         });
         UI.setup.on("click", "button", updateServerUrl);
-        UI.page.on("click", "button[data-btn=query]", makeRequest(queryServerPage));
-        UI.page.on("click", "button[data-btn=save]", saveServerPage);
+        UI.create.on("click", "button[data-btn=query]", makeRequest(queryServerPage));
+        UI.create.on("click", "button[data-btn=save]", makeRequest(saveServerPage));
         UI.float.hover(() => {
             runtime.onFloat = true;
         }, () => {
@@ -44,7 +44,7 @@ jQuery($ => {
             delayedFadeOut(() => !runtime.onControl);
         });
         UI.float.on("click", "button", addRemoveElement);
-        UI.files.on("click", "button", uploadList);
+        UI.files.on("click", "button", makeRequest(uploadList));
     }else{
         console.log('页面内未找到表单元素，退出')
     }
@@ -55,12 +55,11 @@ jQuery($ => {
         runtime.serverUrl = serverUrl || '';
         if(serverUrl){
             status.text("已设置服务器").prop('title', serverUrl);
-            UI.page.show();
-            UI.files.show();
-            UI.execute.show();
+            UI.create.show();
+            queryServerPage();
         }else{
             status.text("未设置服务器").prop('title', '');
-            UI.page.hide();
+            UI.create.hide();
             UI.files.hide();
             UI.execute.hide();
         }
@@ -82,11 +81,12 @@ jQuery($ => {
             e.preventDefault();
             const $btn = $(this);
             $btn.prop('disabled', true);
-            return creator().fail((jqXHR, status, error) => {
-                // alert('网络请求错误');
+            const xhr = creator();
+            return xhr ? xhr.fail((jqXHR) => {
+                alert('网络请求错误');
             }).always(() => {
                 $btn.prop('disabled', false);
-            });
+            }) : null;
         }
     }
 
@@ -96,7 +96,7 @@ jQuery($ => {
             if(page){
                 setPageData(page);
             }else{
-                UI.page.$status.text("新页面，请依次点击页面中的表单元素");
+                UI.create.$status.text("新页面，请依次点击页面中的表单元素");
             }
             $formElements.addClass("__Highlight");
             $formElements.hover(onSelectElement, onDeselectElement);
@@ -105,6 +105,10 @@ jQuery($ => {
     }
 
     function saveServerPage(){
+        if(runtime.fields.length === 0){
+            alert('未选中任何控件');
+            return;
+        }
         const name = window.prompt("请为该表单设置名称", runtime.name || document.title);
         const match = window.prompt("请确认该表单出现的网址", runtime.match || getUrl());
         if(!name || !match) return;
@@ -117,6 +121,12 @@ jQuery($ => {
         });
     }
 
+    function addFileItem(file){
+        if(typeof file === 'object' && file.id && file.filename && file.rows && file['uploaded']){
+            UI.fileSelect.append(UI.option.clone().attr({value: file.id, title: (new Date(file['uploaded'] / 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
+        }
+    }
+
     function setPageData(page){
         console.log(page);
         runtime.pageId = page.id;
@@ -125,11 +135,13 @@ jQuery($ => {
         runtime.fields = page.fields;
         runtime.submit = page.submit;
         runtime.files = page.files || [];
-        UI.page.$status.text(`[${page.fields.length}个位置] ${page.name}`);
+        UI.files.show();
+        UI.create.$status.text(`[${page.fields.length}个位置] ${page.name}`);
         UI.fileSelect.empty();
-        UI.files.forEach(file => {
-            UI.fileSelect.append(UI.option.clone().attr({value: file.id, title: (new Date(file['uploaded'] / 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
-        });
+        if(page.files.length){
+            page.files.forEach(addFileItem);
+            UI.execute.show();
+        }
     }
 
     function addRemoveElement(e){
@@ -185,7 +197,7 @@ jQuery($ => {
         }, time);
     }
     function onSelectElement(){
-        const element = this, isInput = ['A', 'BUTTON'].indexOf(element.tagName) === -1,
+        const element = this, isInput = ['A', 'BUTTON'].indexOf(element.tagName) === -1 && element.type !== 'submit',
             rect = element.getBoundingClientRect(),
             path = domPath(element), pathIndex = isInput ? findPathIndex(path) : path === runtime.submit ? 1 : -1, pathAdded = pathIndex >= 0;
         UI.float.find("[data-btn=add]").toggle(isInput && !pathAdded);
@@ -206,15 +218,22 @@ jQuery($ => {
     }
 
     function uploadList(){
-        return $.ajax({
-            url: "animes.php",
-            type: "POST",
-            data: new FormData($form.get(0)),
-            processData: false,
-            contentType: false
-        }).then(response => {
-
-        });
+        if(runtime.pageId){
+            return $.ajax({
+                url: `${runtime.serverUrl}/page/${runtime.pageId}/file`,
+                type: "POST",
+                data: new FormData(UI.files.find("form").get(0)),
+                processData: false,
+                contentType: false
+            }).then((data) => {
+                if(data.error){
+                    alert(data.error);
+                }else{
+                    addFileItem(data);
+                    UI.execute.show();
+                }
+            });
+        }
     }
 });
 

@@ -50,7 +50,7 @@ $app->group('', function(){
         $page = [];
         foreach(['name', 'match', 'fields', 'submit'] as $key){
             $param = $page[] = $request->getParsedBodyParam($key);
-            if(empty($param)) return $response->withJson(['error' => "页面信息 $key 为空"]);
+            if($key !== 'submit' && empty($param)) return $response->withJson(['error' => "页面信息 $key 为空"]);
         }
         if(!json_decode($page[2]) || json_last_error() !== JSON_ERROR_NONE) return $response->withJson(['error' => "页面配置字段错误:" . json_last_error_msg()]);
         $testStmt = $pdo->prepare('SELECT id FROM pages WHERE match = ?');
@@ -70,9 +70,11 @@ $app->group('', function(){
     $this->post('/page/{pageId:[0-9]+}/file', function($pageId, Request $request, Response $response, \PDO $pdo){
         $pageId = intval($pageId);
         if($pageId <= 0) return $response->withJson(['error' => '所属页面ID未设置']);
-        $checkStmt = $pdo->prepare('SELECT id FROM pages WHERE id = ?');
+        $checkStmt = $pdo->prepare('SELECT fields FROM pages WHERE id = ?');
         $checkStmt->execute([$pageId]);
-        if(empty($checkStmt->fetch())) return $response->withJson(['error' => '所属页面ID不存在']);
+        if(empty($result = $checkStmt->fetch())) return $response->withJson(['error' => '所属页面ID不存在']);
+        $fields = json_decode($result['fields'], true);
+        if(!is_array($fields) || empty($fields)) return $response->withJson(['error' => '所属页面定义异常']);
         $file = $request->getUploadedFiles()['upload'] ?? null;
         if($file instanceof \Slim\Http\UploadedFile){
             if($file->getError() === UPLOAD_ERR_OK){
@@ -83,6 +85,8 @@ $app->group('', function(){
                     $spreadsheet = $reader->load($file->file);
                     $sheet = $spreadsheet->getActiveSheet();
                     $columnCount = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestColumn());
+                    if($columnCount < count($fields)) return $response->withJson(['error' => sprintf('文件内有%u列，少于表单定义%u个', $columnCount, count($fields))]);
+                    $columnCount = min(count($fields), $columnCount);
                     $rowCount = $sheet->getHighestRow();
                     if($rowCount < 2) return $response->withJson(['error' => '文件内无有效数据，首行不导入']);
                     $pdo->beginTransaction();
@@ -90,7 +94,7 @@ $app->group('', function(){
                     $fileStmt->execute([$pageId, $filename, time()]);
                     $fileId = intval($pdo->lastInsertId());
                     $rowStmt = $pdo->prepare('INSERT INTO rows (file, row, data) VALUES (?, ?, ?)');
-                    for($rowIndex = 2; $rowIndex <= $sheet->getHighestRow(); $rowIndex++){
+                    for($rowIndex = 2; $rowIndex <= $rowCount; $rowIndex++){
                         $data = [];
                         for($columnIndex = 1; $columnIndex <= $columnCount; $columnIndex++){
                             $value = $sheet->getCellByColumnAndRow($columnIndex, $rowIndex)->getValue();
@@ -100,7 +104,13 @@ $app->group('', function(){
                         $rowStmt->execute([$fileId, $rowIndex - 1, json_encode($data, JSON_UNESCAPED_UNICODE)]);
                     }
                     $pdo->commit();
-                    return $response->withJson(compact('fileId'));
+                    return $response->withJson([
+                        'id' => $fileId,
+                        'filename' => $filename,
+                        'uploaded' => time(),
+                        'rows' => intval($rowCount),
+                        'ran' => 0
+                    ]);
                 }catch (\Exception $e){
                     return $response->withJson(['error' => '文件读取失败:' . $e->getMessage()]);
                 }
@@ -126,7 +136,6 @@ $app->group('', function(){
             $row['data'] = json_decode($row['data']);
             return $row;
         }, $stmt->fetchAll()));
-
     });
 })->add(function(Request $request, Response $response, callable $next){
     /** @var Response $response */
