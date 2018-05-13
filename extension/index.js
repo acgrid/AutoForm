@@ -5,7 +5,7 @@ jQuery($ => {
 <div id="__Setup"><span></span><button>修改</button></div>
 <div id="__Create"><button data-btn="query">重新查询</button><button data-oncreate="query" data-btn="save">保存</button><p data-oncreate="query"></p></div>
 <div id="__Upload" data-oncreate="page"><form enctype="multipart/form-data"><input type="file" name="upload" accept=".xls, .xlsx, .csv"><button>上传Excel表格</button></form></div>
-<div id="__Execute" data-oncreate="file">文件选择:<select></select><br />行范围:<input type="number" name="from" value="1" />-<input type="number" name="to" value="" /><br /><button>开始填写</button></div>
+<div id="__Execute" data-oncreate="file">文件选择:<select></select><br />行范围:<input type="number" name="from" value="1" />-<input type="number" name="to" value="" /><br /><button>开始填写</button><span></span></div>
 </section>`);
         const ui = {
             container,
@@ -18,6 +18,7 @@ jQuery($ => {
         };
         ui.create.$status = ui.create.find("p");
         ui.fileSelect = ui.execute.find("select");
+        ui.fillStatus = ui.execute.find("span");
         return ui;
     })();
     // Is there any form elements?
@@ -44,6 +45,10 @@ jQuery($ => {
         UI.float.on("click", "button", addRemoveElement);
         UI.files.on("click", "button", makeRequest(uploadList));
         UI.execute.on("click", "button", startSubmit);
+        UI.fileSelect.change(() => {
+            const rows = UI.fileSelect.find(`[value=${UI.fileSelect.val()}]`).data("rows");
+            if(rows) UI.execute.find("[name=to]").val(rows);
+        });
     }else{
         console.log('页面内未找到表单元素，退出')
     }
@@ -81,7 +86,7 @@ jQuery($ => {
             const $btn = $(this);
             $btn.prop('disabled', true);
             const xhr = creator();
-            return xhr ? xhr.fail((jqXHR) => {
+            return xhr ? xhr.fail(() => {
                 alert('网络请求错误');
             }).always(() => {
                 $btn.prop('disabled', false);
@@ -110,6 +115,7 @@ jQuery($ => {
         if(Array.isArray(tasks.rows) && tasks.rows.length){
             const row = tasks.rows.shift();
             if(row){ // fill
+                UI.fillStatus.text(`共${tasks.total},剩余${tasks.rows.length}项`);
                 runtime.fields.forEach((field, index) => {
                     const $input = $(field), data = row.data[index];
                     if(!$input.length) return;
@@ -127,6 +133,7 @@ jQuery($ => {
                     });
                 });
             }else{ // empty
+                UI.fillStatus.text(`共${tasks.total},填写完毕`);
                 chrome.storage.local.remove('tasks');
             }
         }
@@ -151,7 +158,7 @@ jQuery($ => {
 
     function addFileItem(file){
         if(typeof file === 'object' && file.id && file.filename && file.rows && file['uploaded']){
-            UI.fileSelect.append(UI.option.clone().attr({value: file.id, title: (new Date(file['uploaded'] / 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
+            UI.fileSelect.append(UI.option.clone().attr({value: file.id, "data-rows": file.rows, title: (new Date(file['uploaded'] / 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
         }
     }
 
@@ -169,6 +176,7 @@ jQuery($ => {
         if(runtime.files.length){
             runtime.files.forEach(addFileItem);
             UI.execute.show();
+            UI.fileSelect.change();
         }
     }
 
@@ -270,7 +278,8 @@ jQuery($ => {
         const from = UI.execute.find("[name=from]").val() || "";
         const to = UI.execute.find("[name=to]").val() || "";
         $.get(`${runtime.serverUrl}/file/${fileId}`, {from, to}).then(rows => {
-            const tasks = {pageId: runtime.pageId, rows, url: location.href};
+            if(!rows.length) return;
+            const tasks = {pageId: runtime.pageId, rows, url: location.href, total: rows.length};
             chrome.storage.local.set({tasks}, () => {
                 doSubmit(tasks);
             });
