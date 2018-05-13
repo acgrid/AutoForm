@@ -3,7 +3,7 @@ jQuery($ => {
     const UI = (function(){
         const container = $(`<section id="__AutoForm"><h5>表单填写工具</h5>
 <div id="__Setup"><span></span><button>修改</button></div>
-<div id="__Create"><button data-btn="query">查询服务器</button><button data-oncreate="query" data-btn="save">保存</button><p data-oncreate="query"></p></div>
+<div id="__Create"><button data-btn="query">重新查询</button><button data-oncreate="query" data-btn="save">保存</button><p data-oncreate="query"></p></div>
 <div id="__Upload" data-oncreate="page"><form enctype="multipart/form-data"><input type="file" name="upload" accept=".xls, .xlsx, .csv"><button>上传Excel表格</button></form></div>
 <div id="__Execute" data-oncreate="file">文件选择:<select></select><br />行范围:<input type="number" name="from" value="1" />-<input type="number" name="to" value="" /><br /><button>开始填写</button></div>
 </section>`);
@@ -20,8 +20,6 @@ jQuery($ => {
         ui.fileSelect = ui.execute.find("select");
         return ui;
     })();
-    // TODO Query BG and get current
-    //
     // Is there any form elements?
     const $formElements = $('input,select,textarea').not('[type=submit]');
     const $buttonElements = $('a,button,input[type=submit]');
@@ -45,6 +43,7 @@ jQuery($ => {
         });
         UI.float.on("click", "button", addRemoveElement);
         UI.files.on("click", "button", makeRequest(uploadList));
+        UI.execute.on("click", "button", startSubmit);
     }else{
         console.log('页面内未找到表单元素，退出')
     }
@@ -95,6 +94,9 @@ jQuery($ => {
             $("[data-oncreate=query]").show();
             if(page){
                 setPageData(page);
+                chrome.storage.local.get(({tasks}) => {
+                    if(tasks && tasks.pageId === runtime.pageId) doSubmit(tasks);
+                });
             }else{
                 UI.create.$status.text("新页面，请依次点击页面中的表单元素");
             }
@@ -102,6 +104,32 @@ jQuery($ => {
             $formElements.hover(onSelectElement, onDeselectElement);
             $buttonElements.hover(onSelectElement, onDeselectElement);
         });
+    }
+
+    function doSubmit(tasks){
+        if(Array.isArray(tasks.rows) && tasks.rows.length){
+            const row = tasks.rows.shift();
+            if(row){ // fill
+                runtime.fields.forEach((field, index) => {
+                    const $input = $(field), data = row.data[index];
+                    if(!$input.length) return;
+                    if($input.attr("type") === "checkbox"){
+                        $input.prop("checked", !!data);
+                    }else{
+                        $input.val(data);
+                    }
+                });
+                chrome.storage.local.set({tasks}, () => {
+                    const submit = runtime.submit;
+                    if(!submit) return;
+                    chrome.runtime.sendMessage({reload: tasks.url}, () => {
+                        $(runtime.submit).click();
+                    });
+                });
+            }else{ // empty
+                chrome.storage.local.remove('tasks');
+            }
+        }
     }
 
     function saveServerPage(){
@@ -138,8 +166,8 @@ jQuery($ => {
         UI.files.show();
         UI.create.$status.text(`[${page.fields.length}个位置] ${page.name}`);
         UI.fileSelect.empty();
-        if(page.files.length){
-            page.files.forEach(addFileItem);
+        if(runtime.files.length){
+            runtime.files.forEach(addFileItem);
             UI.execute.show();
         }
     }
@@ -204,7 +232,7 @@ jQuery($ => {
         UI.float.find("[data-btn=remove]").toggle(isInput && pathAdded);
         UI.float.find("[data-btn=submit]").toggle(!isInput && !pathAdded);
         UI.float.find("span").text(pathAdded ? (isInput ? `序号：${pathIndex + 1}` : '已选为提交按钮') : '');
-        UI.float.css({top: rect.y - rect.height / 2, left: rect.x - 50}).data({path, pathIndex}).show();
+        UI.float.css({top: rect.y - rect.height / 2, left: rect.x - 20}).data({path, pathIndex}).show();
         runtime.onControl = true;
     }
 
@@ -234,6 +262,19 @@ jQuery($ => {
                 }
             });
         }
+    }
+
+    function startSubmit() {
+        const fileId = UI.execute.find("select").val();
+        if(!fileId) return;
+        const from = UI.execute.find("[name=from]").val() || "";
+        const to = UI.execute.find("[name=to]").val() || "";
+        $.get(`${runtime.serverUrl}/file/${fileId}`, {from, to}).then(rows => {
+            const tasks = {pageId: runtime.pageId, rows, url: location.href};
+            chrome.storage.local.set({tasks}, () => {
+                doSubmit(tasks);
+            });
+        });
     }
 });
 

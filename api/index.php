@@ -108,7 +108,7 @@ $app->group('', function(){
                         'id' => $fileId,
                         'filename' => $filename,
                         'uploaded' => time(),
-                        'rows' => intval($rowCount),
+                        'rows' => intval($rowCount - 1),
                         'ran' => 0
                     ]);
                 }catch (\Exception $e){
