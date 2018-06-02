@@ -84,8 +84,8 @@ jQuery($ => {
         return function(e){
             e.preventDefault();
             const $btn = $(this);
-            $btn.prop('disabled', true);
             const xhr = creator();
+            if(xhr) $btn.prop('disabled', true);
             return xhr ? xhr.fail(() => {
                 alert('网络请求错误');
             }).always(() => {
@@ -145,8 +145,9 @@ jQuery($ => {
             return;
         }
         const name = window.prompt("请为该表单设置名称", runtime.name || document.title);
+        if(!name) return;
         const match = window.prompt("请确认该表单出现的网址", runtime.match || getUrl());
-        if(!name || !match) return;
+        if(!match) return;
         const page = {name, match, fields: runtime.fields, submit: runtime.submit};
         return $.post(`${runtime.serverUrl}/page`, {...page, fields: JSON.stringify(runtime.fields)}).then(response => {
             if(response['pageId']){
