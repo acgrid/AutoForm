@@ -14,7 +14,7 @@ jQuery($ => {
             files: container.find("#__Upload"),
             execute: container.find("#__Execute"),
             option: $(`<option></option>`),
-            float: $('<div id="__AutoFormFloat" data-oncreate="select"><span></span><button data-btn="add">添加</button><button data-btn="remove">删除</button><button data-btn="submit">提交按钮</button></div>')
+            float: $('<div id="__AutoFormFloat" data-oncreate="select"><span></span><button data-btn="add">添加</button><button data-btn="remove">删除</button><button data-btn="submit">提交按钮</button><button data-btn="de-submit">取消提交按钮</button></div>')
         };
         ui.create.$status = ui.create.find("p");
         ui.fileSelect = ui.execute.find("select");
@@ -194,6 +194,9 @@ jQuery($ => {
             case 'submit':
                 runtime.submit = path;
                 break;
+            case 'de-submit':
+                runtime.submit = '';
+                break;
         }
         UI.float.hide();
         runtime.onFloat = false;
@@ -240,8 +243,9 @@ jQuery($ => {
         UI.float.find("[data-btn=add]").toggle(isInput && !pathAdded);
         UI.float.find("[data-btn=remove]").toggle(isInput && pathAdded);
         UI.float.find("[data-btn=submit]").toggle(!isInput && !pathAdded);
+        UI.float.find("[data-btn=de-submit]").toggle(!isInput && pathAdded);
         UI.float.find("span").text(pathAdded ? (isInput ? `序号：${pathIndex + 1}` : '已选为提交按钮') : '');
-        UI.float.css({top: rect.y - rect.height / 2, left: rect.x - 20}).data({path, pathIndex}).show();
+        UI.float.css({top: rect.y - rect.height, left: rect.x - 20}).data({path, pathIndex}).show();
         runtime.onControl = true;
     }
 
