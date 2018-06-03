@@ -190,7 +190,7 @@ jQuery($ => {
     // setPageData为加入每个文件项目所调用
     function addFileItem(file){
         if(typeof file === 'object' && file.id && file.filename && file.rows && file['uploaded']){
-            UI.fileSelect.append(UI.option.clone().attr({value: file.id, "data-rows": file.rows, title: (new Date(file['uploaded'] / 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
+            UI.fileSelect.append(UI.option.clone().attr({value: file.id, "data-rows": file.rows, title: (new Date(file['uploaded'] * 1000)).toLocaleString()}).text(`[${file.rows}行]${file.filename}`));
         }
     }
 
